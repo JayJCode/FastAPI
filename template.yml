@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Wine categorizer
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.12
+    Environment:
+      Variables:
+        BUCKET_NAME: vines-datasets
+
+Resources:
+  WineBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: vines-datasets
+      AccessControl: BucketOwnerFullControl
+
+  WineCategorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: fastapi-wine-service-dev-categorize_wines
+      Handler: handler.categorize_wines
+      CodeUri: ./lambda
+      Policies:
+        - S3ReadPolicy:
+            BucketName: vines-datasets
+        - S3WritePolicy:
+            BucketName: vines-datasets
+      Events:
+        S3Trigger:
+          Type: S3
+          Properties:
+            Bucket: !Ref WineBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .csv
+
+Outputs:
+  FunctionName:
+    Description: "Lambda function name"
+    Value: !Ref WineCategorizerFunction
