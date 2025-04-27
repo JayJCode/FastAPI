@@ -1,22 +1,34 @@
 # 🍷 Wine Quality Categorizer
 
-## API Endpoint
+## API
 
 **GET** `/display-wines/`
 
 - **Parameter**: `quality` (required)  
   - Accepted values: `"low"` or `"high"`
 - **Returns**: JSON list of wines matching the specified quality category
-- **Example**:
+- **Local**:
   ```bash
+  cd api
+  uvicorn main:app --reload
   curl "http://localhost:8000/display-wines/?quality=high"
+  ```
+- **AWS**:
+  ```bash
+  $url = (aws cloudformation describe-stacks --stack-name wine-app --query "Stacks[0].Outputs[?OutputKey=='APIEndpoint'].OutputValue" --output text)
+  curl "${url}/display-wines?quality=high"
   ```
 
 ---
 
-## Lambda Function
+## Lambdas
 
-**Trigger**: Automatically triggered upon CSV file uploads to an S3 bucket.
+**Watcher**: Automatically triggered upon CSV file uploads to an S3 bucket.
+
+### Functionality:
+Invoke Process lambda
+
+**Process**: Main functionality 
 
 ### Functionality:
 - Retrieves `winequality-red.csv` and `winequality-white.csv` from S3
@@ -26,17 +38,7 @@
   - `high`: quality ≥ 7
 - Saves the categorized data as a JSON file back to S3
 
-### Required Permissions:
-- S3 (Read/Write)
-- CloudWatch Logs
-
 ---
 
 ## Requirements
-
-- Python 3.12  
-- AWS CLI (for deployment)  
-- Python Libraries:  
-  - `pandas`  
-  - `boto3`  
-  - `fastapi`
+- requirements.txt

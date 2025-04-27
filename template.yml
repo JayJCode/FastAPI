@@ -1,47 +1,253 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
-Description: Wine categorizer
+Description: Wine Quality Processing System
 
-Globals:
-  Function:
-    Timeout: 30
-    MemorySize: 512
-    Runtime: python3.12
-    Environment:
-      Variables:
-        BUCKET_NAME: vines-datasets
+Parameters:
+  BucketName:
+    Type: String
+    Default: vines-datasets
+    Description: Name of the S3 bucket for wine datasets
 
 Resources:
   WineBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: vines-datasets
-      AccessControl: BucketOwnerFullControl
-
-  WineCategorizerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: fastapi-wine-service-dev-categorize_wines
-      Handler: handler.categorize_wines
-      CodeUri: ./lambda
-      Policies:
-        - S3ReadPolicy:
-            BucketName: vines-datasets
-        - S3WritePolicy:
-            BucketName: vines-datasets
-      Events:
-        S3Trigger:
-          Type: S3
-          Properties:
-            Bucket: !Ref WineBucket
-            Events: s3:ObjectCreated:*
+      BucketName: !Ref BucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:*'
             Filter:
               S3Key:
                 Rules:
                   - Name: suffix
-                    Value: .csv
+                    Value: '.csv'
+            Function: !GetAtt WatcherLambdaFunction.Arn
+
+  ProcessorLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: wine-processor
+      Role: !GetAtt ProcessorLambdaRole.Arn
+      PackageType: Image
+      Code:
+        ImageUri: 199215058137.dkr.ecr.eu-north-1.amazonaws.com/wine-processor:latest
+      MemorySize: 1024
+      Timeout: 60
+      ImageConfig:
+        Command:
+          - "processor.handler.categorize_wines"
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref BucketName
+
+  ProcessorLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub "arn:aws:s3:::${BucketName}/*"
+        - PolicyName: LambdaBasicExecution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+        - PolicyName: ECRAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/wine-processor"
+
+  WatcherLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: wine-watcher
+      Role: !GetAtt WatcherLambdaRole.Arn
+      PackageType: Image
+      Code:
+        ImageUri: 199215058137.dkr.ecr.eu-north-1.amazonaws.com/wine-processor:latest
+      MemorySize: 1024
+      Timeout: 60
+      ImageConfig:
+        Command:
+          - "watcher.handler.handler"
+      Environment:
+        Variables:
+          PROCESSOR_FUNCTION: !Ref ProcessorLambdaFunction
+
+  WatcherLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeProcessorPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt ProcessorLambdaFunction.Arn
+        - PolicyName: S3EventPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:GetBucketNotification
+                Resource: !Sub "arn:aws:s3:::${BucketName}"
+        - PolicyName: LambdaBasicExecution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+        - PolicyName: ECRAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/wine-processor"
+
+  APILambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: wine-api
+      Role: !GetAtt APILambdaRole.Arn
+      PackageType: Image
+      Code:
+        ImageUri: 199215058137.dkr.ecr.eu-north-1.amazonaws.com/wine-processor:latest
+      MemorySize: 1024
+      Timeout: 60
+      ImageConfig:
+        Command:
+          - "api.main.app"
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref BucketName
+
+  APILambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3ReadPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${BucketName}"
+                  - !Sub "arn:aws:s3:::${BucketName}/*"
+        - PolicyName: LambdaBasicExecution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+        - PolicyName: ECRAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/wine-processor"
+
+  WineAPI:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: WineAPI-v2
+      ProtocolType: HTTP
+
+  APILambdaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WineAPI
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APILambdaFunction.Arn}/invocations"
+      PayloadFormatVersion: "2.0"
+
+  APIRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WineAPI
+      RouteKey: "GET /display-wines"
+      Target: !Sub "integrations/${APILambdaIntegration}"
+
+  APIStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WineAPI
+      StageName: "prod"
+      AutoDeploy: true
+
+  APILambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt APILambdaFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WineAPI}/*/*/display-wines"
+
+  BucketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt WatcherLambdaFunction.Arn
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub "arn:aws:s3:::${BucketName}"
 
 Outputs:
-  FunctionName:
-    Description: "Lambda function name"
-    Value: !Ref WineCategorizerFunction
+  WineBucketName:
+    Value: !Ref BucketName
+    Description: Name of the S3 bucket for wine datasets
+  APIEndpoint:
+    Value: !Sub "https://${WineAPI}.execute-api.${AWS::Region}.amazonaws.com/prod"
+    Description: Endpoint URL for the Wine API

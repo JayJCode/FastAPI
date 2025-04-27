@@ -4,10 +4,11 @@ from typing import Literal
 import boto3
 import json
 import os
-
+from mangum import Mangum
 
 s3 = boto3.client('s3')
 app = FastAPI()
+handler = Mangum(app)
 bucket_name = os.environ['BUCKET_NAME']
 
 @app.get("/display-wines/")

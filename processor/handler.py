@@ -2,7 +2,7 @@ import json
 import boto3
 import os
 import logging
-from utils.wine_processor import get_from_bucket, transform, save_to_bucket
+from processor.utils.wine_processor import get_from_bucket, transform, save_to_bucket
 
 
 logger = logging.getLogger()
