@@ -6,6 +6,10 @@ Parameters:
     Type: String
     Default: vines-datasets
     Description: Name of the S3 bucket for wine datasets
+  ECRUri:
+    Type: String
+    Default: 199215058137.dkr.ecr.eu-north-1.amazonaws.com/wine-processor:latest
+    Description: ECR image URI for the wine processor
 
 Resources:
   WineBucket:
@@ -29,7 +33,7 @@ Resources:
       Role: !GetAtt ProcessorLambdaRole.Arn
       PackageType: Image
       Code:
-        ImageUri: 199215058137.dkr.ecr.eu-north-1.amazonaws.com/wine-processor:latest
+        ImageUri: !Ref ECRUri
       MemorySize: 1024
       Timeout: 60
       ImageConfig:
@@ -86,7 +90,7 @@ Resources:
       Role: !GetAtt WatcherLambdaRole.Arn
       PackageType: Image
       Code:
-        ImageUri: 199215058137.dkr.ecr.eu-north-1.amazonaws.com/wine-processor:latest
+        ImageUri: !Ref ECRUri
       MemorySize: 1024
       Timeout: 60
       ImageConfig:
@@ -141,101 +145,6 @@ Resources:
                   - ecr:BatchGetImage
                 Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/wine-processor"
 
-  APILambdaFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: wine-api
-      Role: !GetAtt APILambdaRole.Arn
-      PackageType: Image
-      Code:
-        ImageUri: 199215058137.dkr.ecr.eu-north-1.amazonaws.com/wine-processor:latest
-      MemorySize: 1024
-      Timeout: 60
-      ImageConfig:
-        Command:
-          - "api.main.app"
-      Environment:
-        Variables:
-          BUCKET_NAME: !Ref BucketName
-
-  APILambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: S3ReadPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:ListBucket
-                Resource:
-                  - !Sub "arn:aws:s3:::${BucketName}"
-                  - !Sub "arn:aws:s3:::${BucketName}/*"
-        - PolicyName: LambdaBasicExecution
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: '*'
-        - PolicyName: ECRAccess
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ecr:GetDownloadUrlForLayer
-                  - ecr:BatchGetImage
-                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/wine-processor"
-
-  WineAPI:
-    Type: AWS::ApiGatewayV2::Api
-    Properties:
-      Name: WineAPI-v2
-      ProtocolType: HTTP
-
-  APILambdaIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref WineAPI
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APILambdaFunction.Arn}/invocations"
-      PayloadFormatVersion: "2.0"
-
-  APIRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref WineAPI
-      RouteKey: "GET /display-wines"
-      Target: !Sub "integrations/${APILambdaIntegration}"
-
-  APIStage:
-    Type: AWS::ApiGatewayV2::Stage
-    Properties:
-      ApiId: !Ref WineAPI
-      StageName: "prod"
-      AutoDeploy: true
-
-  APILambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt APILambdaFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WineAPI}/*/*/display-wines"
-
   BucketPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -248,6 +157,3 @@ Outputs:
   WineBucketName:
     Value: !Ref BucketName
     Description: Name of the S3 bucket for wine datasets
-  APIEndpoint:
-    Value: !Sub "https://${WineAPI}.execute-api.${AWS::Region}.amazonaws.com/prod"
-    Description: Endpoint URL for the Wine API

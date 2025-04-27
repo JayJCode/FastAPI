@@ -6,13 +6,18 @@
 
 - **Parameter**: `quality` (required)  
   - Accepted values: `"low"` or `"high"`
+
 - **Returns**: JSON list of wines matching the specified quality category
-- **Local**:
+
+- **CLI**:
   ```bash
   cd api
   uvicorn main:app --reload
   curl "http://localhost:8000/display-wines/?quality=high"
   ```
+
+- **GUI**:
+  http://127.0.0.1:8000/docs
 
 ---
 
@@ -37,3 +42,25 @@
 
 ## Requirements
 - requirements.txt
+
+---
+
+## ESSENTIAL BEFORE ANY DEPLOYMENT!
+
+### Docker image and ECR creation
+
+  **In {ID/REGION} put your ECR id/region**
+  ```aws ecr create-repository --repository-name wine-processor
+  docker build -t wine-processor .
+  docker tag wine-processor:latest {ID}.dkr.ecr.{REGION}.amazonaws.com/wine-processor:latest
+  docker push {ID}.dkr.ecr.{REGION}.amazonaws.com/wine-processor:latest
+  ```
+
+  **Change ur ImageUri**
+  (example)
+  ```
+  ECRUri:
+    Type: String
+    Default: 199215058137.dkr.ecr.eu-north-1.amazonaws.com/wine-processor:latest
+    Description: ECR image URI for the wine processor
+  ```
