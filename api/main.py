@@ -4,11 +4,12 @@ from typing import Literal
 import boto3
 import json
 import os
-from mangum import Mangum
+from dotenv import load_dotenv
+
 
 s3 = boto3.client('s3')
 app = FastAPI()
-handler = Mangum(app)
+load_dotenv()
 bucket_name = os.environ['BUCKET_NAME']
 
 @app.get("/display-wines/")

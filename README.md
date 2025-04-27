@@ -13,24 +13,19 @@
   uvicorn main:app --reload
   curl "http://localhost:8000/display-wines/?quality=high"
   ```
-- **AWS**:
-  ```bash
-  $url = (aws cloudformation describe-stacks --stack-name wine-app --query "Stacks[0].Outputs[?OutputKey=='APIEndpoint'].OutputValue" --output text)
-  curl "${url}/display-wines?quality=high"
-  ```
 
 ---
 
 ## Lambdas
 
-**Watcher**: Automatically triggered upon CSV file uploads to an S3 bucket.
+### Watcher: Automatically triggered upon CSV file uploads to an S3 bucket.
 
-### Functionality:
-Invoke Process lambda
+**Functionality:**
+- Invoke Process lambda
 
-**Process**: Main functionality 
+### Process: Main functionality 
 
-### Functionality:
+**Functionality:**
 - Retrieves `winequality-red.csv` and `winequality-white.csv` from S3
 - Merges both datasets
 - Categorizes wine quality:
